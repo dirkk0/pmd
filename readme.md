@@ -7,8 +7,16 @@ No production quality whatsoever - use at own risk!
 ## How to install
 tbd
 
+### Linux
+
+sudo apt-get install python-pip
+sudo pip install redis
+
 ## How to use
 
 ```
 python pmd.py datafolder
 ```
+### todo
+- clean up/tests/docs
+- user Redis pubsub instead of polling

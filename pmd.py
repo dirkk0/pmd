@@ -60,10 +60,9 @@ if len(sys.argv) > 1:
                 r.set('file:%s:hash' % filename, "-1")
                 # helpers.upload(r, folder, filename)
 
-        helpers.abgleich_slave(r, folder)
-        helpers.upload_all(r, folder)
-        # helpers.abgleich_master(r, folder)
-        helpers.download_all(r, folder)
+        helpers.clean_slave(r, folder)
+        helpers.upload_folder(r, folder)
+        helpers.download_folder(r, folder)
 
         oldFiles = os.listdir(folder)
 
