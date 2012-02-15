@@ -42,15 +42,16 @@ def upload_file(r, folder, filename):
             return key, False
     else:
         if r.get('file:%s:hash' % filename) != "0":
-            print 'uploading %s (%s)' % (filename, key)
+            print 'uploading %s ...' % (filename)
 
             infile = open(fullFileName, 'rb')
             r.delete('file:%s:lbin' % key)
             for chunk in read_in_chunks(infile):
                 r.rpush('file:%s:lbin' % key, chunk)
-                print "chunk"
+                # print "chunk"
             r.set('file:%s:name' % key, filename)
             r.set('file:%s:hash' % filename, key)
+            print "...upload ready."
             return key, True
         else:
             print "file was deleted before: %s" % filename
@@ -73,7 +74,7 @@ def clean_slave(r, folder):
     fFiles = os.listdir(folder)
     for filename in fFiles:
         if r.get('file:%s:hash' % filename) == "0":
-            print 'I will key-delete ' + filename
+            print 'Key-delete: ' + filename
             os.remove(os.path.join(folder, filename))
 
 
@@ -84,19 +85,19 @@ def download_file(r, key, foldername='', filename=''):
 
     fullFileName = os.path.join(foldername, filename)
 
-    hash = r.get('file:%s:hash' % filename)
+    redisFileHash = r.get('file:%s:hash' % filename)
     # print filename, hash
 
     if os.path.exists(fullFileName):
         infile = open(fullFileName, 'rb')
-        fileHash = createHash(infile.read())
+        localFileHash = createHash(infile.read())
 
-        if (fileHash == hash):
+        if (localFileHash == redisFileHash):
             # nothing to do
             return
 
     # print fullFileName
-    print 'downloading file. %s' % filename
+    print 'Downloading file: %s (v)' % (filename)
     num = r.llen('file:%s:lbin' % key)
     l = []
     # print num

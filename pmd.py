@@ -17,6 +17,11 @@ parser.add_argument('-d',
     help='Name of directory to watch.',
     default="pmddata")
 
+parser.add_argument('-s',
+    action="store", dest="sleeptime", type=float,
+    help='Time for polling updates.',
+    default=1.0)
+
 results = parser.parse_args()
 print results
 
@@ -39,7 +44,7 @@ if results.pmdDataFolder != "":
     oldFiles = os.listdir(folder)
     changeSet = []
 
-    sleeptime = 1
+    sleeptime = results.sleeptime
     while (1):
 
         timestamp = time.time()
@@ -57,7 +62,7 @@ if results.pmdDataFolder != "":
             # print delList
             for filename in delList:
                 hashkey = r.get('file:%s:hash' % filename)
-                print hashkey
+                print "deleting: %s" % (filename)
                 r.set('file:%s:hash' % filename, "0")
                 r.delete('file:%s:name' % hashkey)
                 r.delete('file:%s:lbin' % hashkey)
@@ -67,19 +72,25 @@ if results.pmdDataFolder != "":
         if addList:
             # print "add: "
             # print addList
-            for filename in addList:
-                r.delete('file:%s:hash' % filename)
+            if filename in changeSet:
+                # file was changed by the system, not the user
+                print "(no add) %s is in changeSet! " % filename
+                pass
+            else:
+                for filename in addList:
+                    r.delete('file:%s:hash' % filename)
 
         # was a file changed by the user?
         for filename in currentFiles:
             if filename in changeSet:
                 # file was changed by the system, not the user
+                print "(no change) %s is in changeSet! " % filename
                 pass
             else:
                 fullFilename = os.path.join(folder, filename)
                 # print filename, time.time() - timestamp
-                if (timestamp - os.stat(fullFilename).st_mtime) < sleeptime * 1.5:
-                    print "%s changed!" % filename
+                if (timestamp - os.stat(fullFilename).st_mtime) < sleeptime:
+                    print "Added by the user: %s" % filename
                     r.set('file:%s:hash' % filename, "-1")
 
         helpers.clean_slave(r, folder)
@@ -88,10 +99,10 @@ if results.pmdDataFolder != "":
 
         oldFiles = os.listdir(folder)
 
-        # was a file changed by the system? do not upload again.
+        # was a file added by the system? do not upload again.
         changeSet = list(set(oldFiles).difference(set(currentFiles)))
         if changeSet:
-            print "changeList:"
+            print "changeSet:"
             print changeSet
 
         time.sleep(sleeptime)
