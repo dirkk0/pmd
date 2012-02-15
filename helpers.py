@@ -4,6 +4,10 @@ import hashlib
 import os
 
 
+def log(msg):
+    print(msg)
+
+
 def createHash(pwd):
     m = hashlib.sha1()
     pwd = m.update(pwd)
@@ -18,43 +22,84 @@ def read_in_chunks(infile, chunk_size=1024 * 512):
         chunk = infile.read(chunk_size)
 
 
-def upload_folder(r, folder):
-    files = os.listdir(folder)
+def upload_folder(r, foldername):
+    files = os.listdir(foldername)
     for filename in files:
-        upload_file(r, folder, filename)
+        if filename[0] != '.':
+            upload_file(r, foldername, filename)
 
 
-def upload_file(r, folder, filename):
-    fullFileName = os.path.join(folder, filename)
+def upload_file(r, foldername, filename):
+    fullFileName = os.path.join(foldername, filename)
     if not os.path.exists(fullFileName):
         print "File %s doesn't exist." % fullFileName
         return None, None
 
+    dotFileName = os.path.join(foldername, '.' + filename)
+
     infile = open(fullFileName, 'rb')
+    localFileHash = createHash(infile.read())
 
-    key = createHash(infile.read())
+    redisFileVersion = r.get('file:%s:version' % filename)
+    if redisFileVersion:
+        redisFileVersion = int(redisFileVersion)
+        redisFileHash = r.get('file:%s:hash' % filename)
+        if os.path.exists(dotFileName):
+            localFileVersion = open(dotFileName, 'rb').read()
+            localFileVersion = int(localFileVersion)
+            if (localFileVersion == redisFileVersion):
+                if redisFileHash == localFileHash:
+                    # versions are equal, file hashes are equal
+                    # print("nothng to do")
+                    return False, False
 
-    if r.keys('file:%s:name' % key) and r.get('file:%s:hash' % filename) != "-1":
-        # print 'binary already there. %s' % filename
-        if not r.keys('file:%s:hash' % filename):
-            print 'setting key.' + key
-            r.set('file:%s:hash' % filename, key)
-            return key, False
+        # if not r.keys('binary:%s:filename' % localFileHash):
+        #     log('binary already there 1. %s' % filename)
+        #     r.sadd('binary:%s:filename' % localFileHash, filename)
+        #     r.set('file:%s:hash' % filename, localFileHash)
+        #     redisVersion = r.incr('file:%s:version' % filename)
+        #     open(dotFileName, 'wb').write(str(redisVersion))
+        #     return localFileHash, False
+        # else:
+        # if redisFileHash != localFileHash:
+                else:
+                    if not r.exists('binary:%s:lbin' % localFileHash):
+                        log("ok, we need to upload 1")
+                        infile = open(fullFileName, 'rb')
+                        for chunk in read_in_chunks(infile):
+                            r.rpush('binary:%s:lbin' % localFileHash, chunk)
+                            # print "chunk"
+                    r.sadd('binary:%s:filename' % localFileHash, filename)
+                    r.set('file:%s:hash' % filename, localFileHash)
+
+                    redisVersion = r.incr('file:%s:version' % filename)
+                    print redisFileVersion
+                    print "...wtfready."
+
+                    open(dotFileName, 'wb').write(str(redisVersion))
+                    return localFileHash, True
+
     else:
-        if r.get('file:%s:hash' % filename) != "0":
-            print 'uploading %s ...' % (filename)
+        # totally new, name is not in redis yet.
+        print 'New file \'%s\':' % (filename)
+        print 'Upload %s ...' % (filename)
 
+        # but binary might be there.
+        # if redisFileHash != localFileHash:
+        if not r.exists('binary:%s:lbin' % localFileHash):
+            log("ok, we need to upload 1")
             infile = open(fullFileName, 'rb')
-            r.delete('file:%s:lbin' % key)
             for chunk in read_in_chunks(infile):
-                r.rpush('file:%s:lbin' % key, chunk)
+                r.rpush('binary:%s:lbin' % localFileHash, chunk)
                 # print "chunk"
-            r.set('file:%s:name' % key, filename)
-            r.set('file:%s:hash' % filename, key)
-            print "...upload ready."
-            return key, True
-        else:
-            print "file was deleted before: %s" % filename
+        r.sadd('binary:%s:filename' % localFileHash, filename)
+        r.set('file:%s:hash' % filename, localFileHash)
+
+        redisVersion = r.incr('file:%s:version' % filename)
+        print "...uready."
+
+        open(dotFileName, 'wb').write(str(redisVersion))
+        return localFileHash, True
 
 
 def download_folder(r, foldername):
@@ -71,44 +116,58 @@ def download_folder(r, foldername):
 
 def clean_slave(r, folder):
 
+    files = []
+    dotFiles = []
     fFiles = os.listdir(folder)
     for filename in fFiles:
-        if r.get('file:%s:hash' % filename) == "0":
-            print 'Key-delete: ' + filename
-            os.remove(os.path.join(folder, filename))
+        if filename[0] == '.':
+            dotFiles.append(filename[1:])
+        else:
+            files.append(filename)
+    # print files, dotFiles
+    diff = set(dotFiles).difference(set(files))
+    if diff:
+        print diff
 
 
-def download_file(r, key, foldername='', filename=''):
+            # if r.get('file:%s:hash' % filename) == "0":
+            #     print 'Key-delete: ' + filename
+            #     os.remove(os.path.join(folder, filename))
+
+
+def download_file(r, hashkey, foldername='', filename=''):
 
     if filename == '':
-        filename = key
+        filename = hashkey
 
     fullFileName = os.path.join(foldername, filename)
+    dotFileName = os.path.join(foldername, '.' + filename)
 
-    redisFileHash = r.get('file:%s:hash' % filename)
+    redisFileVersion = int(r.get('file:%s:version' % filename))
     # print filename, hash
 
-    if os.path.exists(fullFileName):
-        infile = open(fullFileName, 'rb')
-        localFileHash = createHash(infile.read())
+    if os.path.exists(dotFileName):
+        localFileVersion = open(dotFileName, 'rb').read()
+        localFileVersion = int(localFileVersion)
 
-        if (localFileHash == redisFileHash):
+        if (localFileVersion == redisFileVersion):
             # nothing to do
             return
 
-    # print fullFileName
-    print 'Downloading file: %s (v)' % (filename)
-    num = r.llen('file:%s:lbin' % key)
+    print 'New file \'%s\' (v%s, h%s):' % (filename, redisFileVersion, hashkey)
+    print 'Download ...'
+    num = r.llen('binary:%s:lbin' % hashkey)
     l = []
     # print num
     for i in range(num):
-        l.append(r.lrange('file:%s:lbin' % key, i, i)[0])
+        l.append(r.lrange('binary:%s:lbin' % hashkey, i, i)[0])
         # print '.'
     #t = r.smembers(key)
     bin = ''.join(l)
 
     open(fullFileName, 'wb').write(bin)
-    # print 'ready'
+    open(dotFileName, 'wb').write(str(redisFileVersion))
+    print '... dready.'
 
 
 def connect_db(configFileName):

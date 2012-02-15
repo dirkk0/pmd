@@ -38,71 +38,19 @@ if results.pmdDataFolder != "":
     try:
         os.mkdir(folder)
         print "created directory: %s" % folder
+        os.mkdir(folder)
     except:
         pass
-
-    oldFiles = os.listdir(folder)
-    changeSet = []
 
     sleeptime = results.sleeptime
     while (1):
 
         timestamp = time.time()
 
-        currentFiles = os.listdir(folder)
-        oldSet = set(oldFiles)
-        currentSet = set(currentFiles)
-
-        # print sfFiles, svFiles
-
-        # was a file deleted by the user?
-        delList = list(oldSet.difference(currentSet))
-        if delList:
-            # print "del:"
-            # print delList
-            for filename in delList:
-                hashkey = r.get('file:%s:hash' % filename)
-                print "deleting: %s" % (filename)
-                r.set('file:%s:hash' % filename, "0")
-                r.delete('file:%s:name' % hashkey)
-                r.delete('file:%s:lbin' % hashkey)
-
-        # was a file added by the user?
-        addList = list(currentSet.difference(oldSet))
-        if addList:
-            # print "add: "
-            # print addList
-            if filename in changeSet:
-                # file was changed by the system, not the user
-                print "(no add) %s is in changeSet! " % filename
-                pass
-            else:
-                for filename in addList:
-                    r.delete('file:%s:hash' % filename)
-
-        # was a file changed by the user?
-        for filename in currentFiles:
-            if filename in changeSet:
-                # file was changed by the system, not the user
-                print "(no change) %s is in changeSet! " % filename
-                pass
-            else:
-                fullFilename = os.path.join(folder, filename)
-                # print filename, time.time() - timestamp
-                if (timestamp - os.stat(fullFilename).st_mtime) < sleeptime:
-                    print "Added by the user: %s" % filename
-                    r.set('file:%s:hash' % filename, "-1")
-
         helpers.clean_slave(r, folder)
         helpers.upload_folder(r, folder)
         helpers.download_folder(r, folder)
 
         oldFiles = os.listdir(folder)
-
-        # was a file added by the system? do not upload again.
-        changeSet = list(set(oldFiles).difference(set(currentFiles)))
-        if changeSet:
-            print "changeSet:"
-            print changeSet
 
         time.sleep(sleeptime)
