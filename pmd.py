@@ -55,7 +55,11 @@ if results.pmdDataFolder != "":
             print "del:"
             print delList
             for filename in delList:
+                hashkey = r.get('file:%s:hash' % filename)
+                print hashkey
                 r.set('file:%s:hash' % filename, "0")
+                r.delete('file:%s:name' % hashkey)
+                r.delete('file:%s:lbin' % hashkey)
 
         # was a file added?
         addList = list(currentSet.difference(oldSet))

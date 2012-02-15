@@ -45,6 +45,7 @@ def upload_file(r, folder, filename):
             print 'uploading %s (%s)' % (filename, key)
 
             infile = open(fullFileName, 'rb')
+            r.delete('file:%s:lbin' % key)
             for chunk in read_in_chunks(infile):
                 r.rpush('file:%s:lbin' % key, chunk)
                 print "chunk"
