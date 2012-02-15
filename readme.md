@@ -15,7 +15,7 @@ sudo pip install redis
 ## How to use
 
 ```
-python pmd.py datafolder
+python pmd.py -c config/localhost.json -d data
 ```
 ### todo
 - clean up/tests/docs

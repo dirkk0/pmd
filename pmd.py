@@ -4,16 +4,31 @@ import time
 
 import os
 
+import argparse
 
-r = helpers.connect_db()
+parser = argparse.ArgumentParser(description='Replicate data via redis.')
+parser.add_argument('-c',
+    action="store", dest="configFileName",
+    help='Name of configfile (for example localhost.json)',
+    default="config/localhost.json")
+
+parser.add_argument('-d',
+    action="store", dest="pmdDataFolder",
+    help='Name of directory to watch.',
+    default="pmddata")
+
+results = parser.parse_args()
+print results
+
+r = helpers.connect_db(results.configFileName)
 
 if not r:
     sys.exit(1)
 
 
 # helpers.download_all(r, 'cache')
-if len(sys.argv) > 1:
-    folder = sys.argv[1]
+if results.pmdDataFolder != "":
+    folder = results.pmdDataFolder
 
     try:
         os.mkdir(folder)

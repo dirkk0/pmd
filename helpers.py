@@ -109,15 +109,15 @@ def download_file(r, key, foldername='', filename=''):
     # print 'ready'
 
 
-def connect_db():
+def connect_db(configFileName):
     # print "Loading configuration."
     # configFile = os.path.join('config', 'server4you.json')
-    configFile = os.path.join('config', 'localhost.json')
-    print 'Trying to load ' + configFile
-    if not os.path.exists(configFile):
-        print 'config file %s not found.' % configFile
+
+    print 'Trying to load ' + configFileName
+    if not os.path.exists(configFileName):
+        print 'config file %s not found.' % configFileName
         return
-    configs = json.load(open(configFile, 'r'))
+    configs = json.load(open(configFileName, 'r'))
 
     r = redis.Redis(host=configs['redisHost'], port=configs['redisPort'], password=configs['redisPassword'], db=0)
     # r2 = redis.Redis(host=configs['redisHost'], port=configs['redisPort'], password=configs['redisPassword'], db=0)
