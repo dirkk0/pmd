@@ -25,8 +25,9 @@ def read_in_chunks(infile, chunk_size=1024 * 512):
 def upload_folder(r, foldername):
     files = os.listdir(foldername)
     for filename in files:
-        if filename[0] != '.':
-            upload_file(r, foldername, filename)
+        if filename[0] != '.':   # ignore all dot files, not only our own!
+            if filename[0:4] != '.pdm':
+                upload_file(r, foldername, filename)
 
 
 def upload_file(r, foldername, filename):
@@ -35,7 +36,7 @@ def upload_file(r, foldername, filename):
         print "File %s doesn't exist." % fullFileName
         return None, None
 
-    dotFileName = os.path.join(foldername, '.' + filename)
+    dotFileName = os.path.join(foldername, '.pdm' + filename)
 
     infile = open(fullFileName, 'rb')
     localFileHash = createHash(infile.read())
@@ -65,19 +66,22 @@ def upload_file(r, foldername, filename):
                 else:
                     # versions are equal, but hashes are not
                     # so local file must have been changed
+                    print 'New file (2) \'%s\':' % (filename)
                     if not r.exists('binary:%s:lbin' % localFileHash):
                         # no appropriate binary in db
-                        log("ok, we need to upload 1")
+                        log("  ok, we need to upload ... (2)")
                         infile = open(fullFileName, 'rb')
                         for chunk in read_in_chunks(infile):
                             r.rpush('binary:%s:lbin' % localFileHash, chunk)
                             # print "chunk"
+                        log("  ... (u2) ready.")
+                    else:
+                        log("  binary already there")
                     r.sadd('binary:%s:filename' % localFileHash, filename)
                     r.set('file:%s:hash' % filename, localFileHash)
 
                     redisFileVersion = r.incr('file:%s:version' % filename)
-                    print redisFileVersion
-                    print "...bready."
+                    print "...(2) ready."
 
                     open(dotFileName, 'wb').write(str(redisFileVersion))
                     return localFileHash, True
@@ -92,7 +96,7 @@ def upload_file(r, foldername, filename):
 
     else:
         # totally new, name is not in redis yet.
-        print 'New file \'%s\':' % (filename)
+        print 'New file (1) \'%s\':' % (filename)
         print 'Upload %s ...' % (filename)
 
         # but binary might be there.
@@ -107,7 +111,7 @@ def upload_file(r, foldername, filename):
         r.set('file:%s:hash' % filename, localFileHash)
 
         redisFileVersion = r.incr('file:%s:version' % filename)
-        print "...u2ready."
+        print "... (1) ready."
 
         open(dotFileName, 'wb').write(str(redisFileVersion))
         return localFileHash, True
@@ -119,8 +123,8 @@ def clean_slave(r, foldername):
     dotFiles = []
     fFiles = os.listdir(foldername)
     for filename in fFiles:
-        if filename[0] == '.':
-            dotFiles.append(filename[1:])
+        if filename[0:4] == '.pdm':
+            dotFiles.append(filename[4:])
         else:
             files.append(filename)
     # print files, dotFiles
@@ -128,26 +132,30 @@ def clean_slave(r, foldername):
     if diff:
         # there are dotFiles without their file
         # so files must have been deleted locally ...
+        # or renamed!
         # print diff
         for filename in diff:
-            dotFileName = os.path.join(foldername, '.' + filename)
+            dotFileName = os.path.join(foldername, '.pdm' + filename)
 
-            redisFileVersion = int(r.get('file:%s:version' % filename))
+            redisFileVersion = r.get('file:%s:version' % filename)
+            if redisFileVersion:
+                redisFileVersion = int(redisFileVersion)
+            localFileVersion = int(open(dotFileName, 'rb').read())
             localFileVersion = int(open(dotFileName, 'rb').read())
 
             if r.get('file:%s:hash' % filename) == "0":
                 # ... unless the server already know this
                 return
 
-            print localFileVersion, redisFileVersion
+            # print localFileVersion, redisFileVersion
             if (localFileVersion == redisFileVersion):
-                # set hash to zero to indicate deleted file
+                # set hash to zero to indicate deleted file and to trigger deletion
                 r.set('file:%s:hash' % filename, 0)
                 # incr version to let the server know
                 redisFileVersion = r.incr('file:%s:version' % filename)
                 # incr version locally so that no up/download occurs
                 open(dotFileName, 'wb').write(str(redisFileVersion))
-                print "incrementing to %s %s" % (redisFileVersion, filename)
+                # print "incrementing to %s %s" % (redisFileVersion, filename)
 
 
 def download_folder(r, foldername):
@@ -165,9 +173,11 @@ def download_file(r, hashkey, foldername='', filename=''):
         filename = hashkey
 
     fullFileName = os.path.join(foldername, filename)
-    dotFileName = os.path.join(foldername, '.' + filename)
+    dotFileName = os.path.join(foldername, '.pdm' + filename)
 
-    redisFileVersion = int(r.get('file:%s:version' % filename))
+    redisFileVersion = r.get('file:%s:version' % filename)
+    if redisFileVersion:
+        redisFileVersion = int(redisFileVersion)
     # print filename, hash
 
     if os.path.exists(dotFileName):
@@ -186,15 +196,16 @@ def download_file(r, hashkey, foldername='', filename=''):
         # print num
         for i in range(num):
             l.append(r.lrange('binary:%s:lbin' % hashkey, i, i)[0])
-            # print '.'
-        #t = r.smembers(key)
         bin = ''.join(l)
 
         open(fullFileName, 'wb').write(bin)
-        print '... dready.'
+        print '... download ready.'
     else:
         print 'Deleting %s' % filename
-        os.remove(os.path.join(foldername, filename))
+        try:
+            os.remove(os.path.join(foldername, filename))
+        except:
+            pass
 
     open(dotFileName, 'wb').write(str(redisFileVersion))
 
